@@ -106,7 +106,7 @@ def init_browser():
         else:
             logger.info("✅ Already on panel page.")
         
-        logger.info("✅ Connected to node successfully!")
+        logger.info("✅ Connected to existing Chrome browser successfully!")
         logger.info("Wait 5-10 seconds after bot start for full load.")
        
     except Exception as e:
@@ -157,7 +157,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     welcome_text = (
         "👋 **Welcome to Bot!** 🚀\n\n"
-        "🔥 **Fast 3 Node Serverr**\n"
+        "🔥 **Fast 3 Node Stresser**\n"
         "🌍 **Nodes:** Singapore | Bangalore | Canada\n\n"
         "**Available Commands:**\n"
         "• `/eren <ip> <port> [time]` → Launch Attack (Max 60s)\n"
@@ -258,7 +258,7 @@ def main():
     
     app.add_handler(MessageHandler(filters.COMMAND, lambda u,c: u.message.reply_text("Unknown command. Try /help")))
     
-    print("🤖 Bot starting... ")
+    print("🤖 Bot starting... (Using external Chrome on port 9222)")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
