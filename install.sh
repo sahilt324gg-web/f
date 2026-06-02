@@ -1,26 +1,24 @@
 #!/bin/bash
-echo " Starting Stresser Bot with Persistent Chrome..."
+echo "Starting Eren Stresser Bot with Persistent Chrome..."
 
-# Kill any existing Chrome instances
+# Kill old Chrome instances
 pkill -f chrome 2>/dev/null
 sleep 2
 
-# Start Chrome with Remote Debugging (Persistent Browser)
+# Start Chrome with Remote Debugging Port
 echo " Launching Chrome on port 9222..."
 google-chrome \
     --remote-debugging-port=9222 \
     --no-sandbox \
     --disable-dev-shm-usage \
     --disable-gpu \
-    --window-size=1280,1024 \
-    --user-data-dir="/root/chrome_profile" \
     --disable-blink-features=AutomationControlled \
+    --window-size=1366,768 \
+    --user-data-dir="/root/chrome_profile" \
     https://return.st/panel &
 
-# Wait for Chrome to fully start
-echo " Waiting for Chrome to initialize (8 seconds)..."
-sleep 8
+echo "⏳ Waiting for Chrome to start (10 seconds)..."
+sleep 10
 
-# Run the Python bot
-echo "🤖 Starting Telegram Bot..."
+echo "Starting Telegram Bot (Connecting to Chrome on port 9222)..."
 python3 stresser_bot.py
